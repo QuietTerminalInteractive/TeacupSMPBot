@@ -11,6 +11,7 @@ from threading import Thread
 from queue import Queue
 from flask import Flask, request, jsonify
 import asyncio
+import re
 
 # Configuration
 log_level = logging.INFO
@@ -19,6 +20,7 @@ users_file = './users.json'
 token_file = './token.txt'
 twitch_api_url = "http://127.0.0.1:5002/notify_discord"
 ping_channel_file = './ping_channel.json'
+people_who_can_marry_the_bot = [606918160146235405]
 
 # Initialize Logging
 if not os.path.exists(log_dir):
@@ -164,6 +166,11 @@ async def on_ready():
     # Start processing announcements
     bot.loop.create_task(process_announcements())
 
+def marry_the_bot_RE(messageText):
+    regex = re.compile(r"(?<!not\s)marry\ssteven", re.IGNORECASE)
+    return regex.search(messageText)
+
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
@@ -172,8 +179,9 @@ async def on_message(message):
     if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
         await message.add_reaction('🔵')
 
-    elif "marry steven" in message.content.lower():
-        if message.author.id == 606918160146235405:
+    elif message.content.lower() == "marry steven":
+
+        if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
             await message.reply("Yes.")
         else:
             await message.reply("No.")
