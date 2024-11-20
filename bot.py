@@ -162,7 +162,7 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Error syncing commands: {e}")
 
-    channel = bot.get_channel(1308431320141139989)
+    channel = bot.get_channel(load_ping_channel())
     message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
     await channel.send(message)
 
