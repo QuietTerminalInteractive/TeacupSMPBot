@@ -12,6 +12,8 @@ from queue import Queue
 from flask import Flask, request, jsonify
 import asyncio
 import re
+import random
+
 
 # Configuration
 log_level = logging.INFO
@@ -176,10 +178,11 @@ def marry_the_bot_RE(messageText):
 
 @bot.event
 async def on_message(message):
+    num = random.randint(1, 10000)
     if message.author == bot.user:
         return
 
-    if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
+    if "circle" in message.content.lower() or "c i r c l e" in message.content.lower() or num == 1:
         await message.add_reaction('🔵')
 
     elif message.content.lower() == "marry steven":
