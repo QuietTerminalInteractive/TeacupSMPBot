@@ -20,7 +20,10 @@ users_file = './users.json'
 token_file = './token.txt'
 twitch_api_url = "http://127.0.0.1:5002/notify_discord"
 ping_channel_file = './ping_channel.json'
-people_who_can_marry_the_bot = [606918160146235405]
+people_who_can_marry_the_bot = [606918160146235405, 
+479325312023396373,
+779052381312516126,
+1219369222933708862]
 
 # Initialize Logging
 if not os.path.exists(log_dir):
@@ -185,6 +188,8 @@ async def on_message(message):
             await message.reply("Yes.")
         else:
             await message.reply("No.")
+    elif message.content.lower() == "tea":
+        await message.reply("Coffee is better.")
 
     await bot.process_commands(message)
 
