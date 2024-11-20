@@ -24,7 +24,7 @@ ping_channel_file = './ping_channel.json'
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 logging.basicConfig(
-    filename=f"{log_dir}/bot-{time.strftime('%Y%m%d-%H%M%S')}.log",
+    filename=f"{log_dir}/bot-{time.strftime('%d%m%Y-%H%M%S')}.log",
     level=log_level,
     format="%(asctime)s %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
@@ -157,13 +157,28 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Error syncing commands: {e}")
 
-    for guild in bot.guilds:
-        logging.info(f"Server: {guild.name} (ID: {guild.id})")
-        for channel in guild.channels:
-            logging.info(f"Channel: {channel.name} (ID: {channel.id})")
+    channel = bot.get_channel(1308431320141139989)
+    message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
+    await channel.send(message)
 
     # Start processing announcements
     bot.loop.create_task(process_announcements())
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
+        await message.add_reaction('🔵')
+
+    elif "marry steven" in message.content.lower():
+        if message.author.id == 606918160146235405:
+            await message.reply("Yes.")
+        else:
+            await message.reply("No.")
+
+    await bot.process_commands(message)
 
 @bot.tree.command(name="setchannel", description="Sets the ping channel to the current channel.")
 async def set_ping_channel(interaction: discord.Interaction):
@@ -245,7 +260,7 @@ async def help_command(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-# Run Flask in a separate thread before starting the bot
+# Run Flask in a separate thread
 flask_thread = Thread(target=run_flask, daemon=True)
 flask_thread.start()
 
