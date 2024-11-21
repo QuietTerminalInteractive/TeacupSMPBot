@@ -23,6 +23,7 @@ token_file = './token.txt'
 settings_file = './settings.json'
 twitch_api_url = "http://127.0.0.1:5002/notify_discord"
 people_who_can_marry_the_bot = [606918160146235405, 479325312023396373, 779052381312516126, 1219369222933708862]
+easter_egg_guilds = [1227640355625766963,1091009808431325184]
 
 # Initialize Logging
 if not os.path.exists(log_dir):
@@ -223,9 +224,12 @@ async def on_ready():
             if ping_channel_id:
                 channel = bot.get_channel(ping_channel_id)
                 if channel:
-                    message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
-                    await channel.send(message)
-                    logging.info(f"Sent debug message to guild {guild.name} ({guild.id}) in channel {channel.name}")
+                    if log_level == logging.DEBUG:
+                        message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
+                        await channel.send(message)
+                        logging.debug(f"Sent debug message to guild {guild.name} ({guild.id}) in channel {channel.name}")
+                    else:
+                        logging.info(f"guild {guild.name} has ping channel set to {channel.name}")
                     
                 else:
                     logging.warning(f"Channel with ID {ping_channel_id} not found in guild {guild.name} ({guild.id}).")
@@ -240,7 +244,12 @@ async def on_ready():
 
 def marry_the_bot_RE(messageText):
     regex = re.compile(r"(?<!not\s)marry\ssteven", re.IGNORECASE)
-    return regex.search(messageText)
+    if regex.search(messageText):
+        logging.debug("Passed check 2")
+        return True
+    else:
+        logging.debug("Failed check 2")
+        return False
 
 def random_trigger(chance):
     if random.randint(1, chance) == 1:
@@ -255,13 +264,13 @@ async def on_message(message):
     
     if message.author == bot.user:
         return
-    if message.guild.id == 1227640355625766963:
+    if message.guild.id in easter_egg_guilds:
         if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
             await message.add_reaction('🔵')
 
 
-        if message.content.lower() == "marry steven":
-            
+        if "marry steven" in message.content.lower().strip():
+            logging.debug(f"Passed check 1")
             if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
                 await message.reply("Yes.")
             else:
