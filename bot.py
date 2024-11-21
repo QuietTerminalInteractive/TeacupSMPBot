@@ -18,14 +18,10 @@ import random
 # Configuration
 log_level = logging.INFO
 log_dir = './logs'
-users_file = './users.json'
 token_file = './token.txt'
+settings_file = './settings.json'
 twitch_api_url = "http://127.0.0.1:5002/notify_discord"
-ping_channel_file = './ping_channel.json'
-people_who_can_marry_the_bot = [606918160146235405, 
-479325312023396373,
-779052381312516126,
-1219369222933708862]
+people_who_can_marry_the_bot = [606918160146235405, 479325312023396373, 779052381312516126, 1219369222933708862]
 
 # Initialize Logging
 if not os.path.exists(log_dir):
@@ -55,112 +51,70 @@ intents.guilds = True
 bot = commands.Bot(command_prefix='.', intents=intents)
 
 # Utility Functions
-
 def load_settings():
-    """
-    Loads the settings from the users.json file.
-
-    If the file doesn't exist, returns a default structure with an empty 'servers' dictionary.
-
-    Returns:
-        dict: A dictionary containing the settings, including the 'servers' key.
-    """
-    if os.path.exists(users_file):
-        with open(users_file, 'r') as f:
+    """Loads the settings from the settings.json file."""
+    if os.path.exists(settings_file):
+        with open(settings_file, 'r') as f:
             return json.load(f)
     return {"servers": {}}
 
 def save_settings(settings):
-    """
-    Saves the given settings to the users.json file.
-
-    Args:
-        settings (dict): The settings to save, typically containing the 'servers' key.
-    """
-    with open(users_file, 'w') as f:
+    """Saves the settings to the settings.json file."""
+    with open(settings_file, 'w') as f:
         json.dump(settings, f, indent=4)
-
-def load_users(guild_id):
-    """
-    Loads the registered users for a specific Discord server (guild).
-
-    Args:
-        guild_id (str): The Discord guild ID to load the users for.
-
-    Returns:
-        dict: A dictionary of users for the specified server, including a list of registered users.
-    """
-    settings = load_settings()
-    return settings["servers"].get(str(guild_id), {}).get("users", {})
-
-def save_users(guild_id, users):
-    """
-    Saves the user data for a specific Discord server (guild).
-
-    Args:
-        guild_id (str): The Discord guild ID where the users should be saved.
-        users (dict): A dictionary of user data to save under the specified guild ID.
-    """
-    settings = load_settings()
-    if str(guild_id) not in settings["servers"]:
-        settings["servers"][str(guild_id)] = {"users": {}}
-    settings["servers"][str(guild_id)]["users"] = users
-    save_settings(settings)
 
 def load_ping_channel(guild_id):
     """
     Loads the ping channel ID for a specific Discord server (guild).
-
-    Args:
-        guild_id (str): The Discord guild ID to load the ping channel for.
-
-    Returns:
-        int or None: The ID of the ping channel for the guild, or None if not set.
     """
     settings = load_settings()
-    return settings["servers"].get(str(guild_id), {}).get("ping_channel_id", None)
+    guild_settings = settings["servers"].get(str(guild_id), {})
+    return guild_settings.get("ping_channel_id", None)
 
 def save_ping_channel(guild_id, channel_id):
-    """
-    Saves the ping channel ID for a specific Discord server (guild).
-
-    Args:
-        guild_id (str): The Discord guild ID where the ping channel should be saved.
-        channel_id (int): The ID of the channel to be used for ping notifications.
-    """
+    """Saves the ping channel ID for a specific guild."""
     settings = load_settings()
     if str(guild_id) not in settings["servers"]:
         settings["servers"][str(guild_id)] = {}
     settings["servers"][str(guild_id)]["ping_channel_id"] = channel_id
     save_settings(settings)
 
-async def send_announcement(user_name, stream_title):
-    """Send a Twitch stream notification to the Discord channel."""
-    global ping_channel_id
+def load_users():
+    """Loads all registered users across all guilds."""
+    settings = load_settings()
+    users = {}
+    for guild_id, guild_data in settings["servers"].items():
+        users[guild_id] = guild_data.get("users", {})
+    return users
 
-    if not ping_channel_id:
-        logging.error("Ping channel ID is not set. Cannot send notification.")
+def save_users(guild_id, users):
+    """Saves the registered users for a specific guild."""
+    settings = load_settings()
+    if str(guild_id) not in settings["servers"]:
+        settings["servers"][str(guild_id)] = {"users": {}}
+    settings["servers"][str(guild_id)]["users"] = users
+    save_settings(settings)
+
+async def send_announcement(user_name, stream_title, guild_id):
+    """Send a Twitch stream notification to the Discord channel."""
+    channel_id = load_ping_channel(guild_id)
+    if not channel_id:
+        logging.error(f"Ping channel not set for guild {guild_id}. Cannot send notification.")
         return
 
-    channel = bot.get_channel(ping_channel_id)
+    channel = bot.get_channel(channel_id)
     if not channel:
-        logging.error(f"Channel with ID {ping_channel_id} not found.")
+        logging.error(f"Channel with ID {channel_id} not found in guild {guild_id}.")
         return
 
     message = f"🔴 {user_name} is live on Twitch! \n**{stream_title}**\nhttps://www.twitch.tv/{user_name}"
     try:
         await channel.send(message)
-        logging.info(f"Notification sent for {user_name}: {stream_title}")
+        logging.info(f"Notification sent for {user_name} in guild {guild_id}.")
     except Exception as e:
-        logging.error(f"Failed to send notification: {e}")
+        logging.error(f"Failed to send notification to guild {guild_id}: {e}")
 
 # Global variables
-ping_channel_id = load_ping_channel()
-if ping_channel_id:
-    logging.info(f"Ping channel loaded: {ping_channel_id}")
-else:
-    logging.info("Ping channel not set.")
-
 start_time = time.time()
 
 # Initialize a Queue for announcements
@@ -177,9 +131,15 @@ def twitch_webhook():
         if 'event' in data:
             user_name = data['event']['broadcaster_user_name']
             stream_title = data['event'].get('title', 'No title provided')
-            announcement_queue.put((user_name, stream_title))
-            logging.debug("Received webhook event and added to queue.")
-            return jsonify({'status': 'received'})
+
+            users = load_users()
+            registered_guilds = [guild_id for guild_id, guild_users in users.items() if user_name in guild_users.values()]
+
+            for guild_id in registered_guilds:
+                announcement_queue.put((user_name, stream_title, guild_id))
+
+            logging.info(f"Webhook processed for {user_name}, queued for {len(registered_guilds)} guild(s).")
+            return jsonify({'status': 'processed', 'guilds_notified': len(registered_guilds)})
         return jsonify({'status': 'ignored'})
     except Exception as e:
         logging.error(f"Webhook error: {e}")
@@ -210,8 +170,8 @@ def run_flask():
 # Background task to process announcements
 async def process_announcements():
     while True:
-        user_name, stream_title = await bot.loop.run_in_executor(None, announcement_queue.get)
-        await send_announcement(user_name, stream_title)
+        user_name, stream_title, guild_id = await bot.loop.run_in_executor(None, announcement_queue.get)
+        await send_announcement(user_name, stream_title, guild_id)
 
 # Commands
 @bot.event
@@ -223,12 +183,24 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Error syncing commands: {e}")
 
-    channel = bot.get_channel(load_ping_channel())
-    message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
-    await channel.send(message)
+    for guild in bot.guilds:
+        try:
+            ping_channel_id = load_ping_channel(guild.id)
+            if ping_channel_id:
+                channel = bot.get_channel(ping_channel_id)
+                if channel:
+                    message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
+                    await channel.send(message)
+                    logging.info(f"Sent debug message to guild {guild.name} ({guild.id}) in channel {channel.name}")
+                else:
+                    logging.warning(f"Channel with ID {ping_channel_id} not found in guild {guild.name} ({guild.id}).")
+            else:
+                logging.warning(f"No ping channel set for guild {guild.name} ({guild.id}).")
+        except Exception as e:
+            logging.error(f"Error sending debug message to guild {guild.name} ({guild.id}): {e}")
 
-    # Start processing announcements
     bot.loop.create_task(process_announcements())
+    logging.info("Bot is ready and announcements are being processed.")
 
 def marry_the_bot_RE(messageText):
     regex = re.compile(r"(?<!not\s)marry\ssteven", re.IGNORECASE)
@@ -259,14 +231,13 @@ async def on_message(message):
 
 @bot.tree.command(name="setchannel", description="Sets the ping channel to the current channel.")
 async def set_ping_channel(interaction: discord.Interaction):
-    global ping_channel_id
-    ping_channel_id = interaction.channel.id
-    save_ping_channel(ping_channel_id)
+    save_ping_channel(interaction.guild.id, interaction.channel.id)
     await interaction.response.send_message(f"Ping channel set to: {interaction.channel.name}")
 
 @bot.tree.command(name="register", description="Register a Twitch username for notifications.")
 async def register_twitch_user(interaction: discord.Interaction, username: str):
-    users = load_users()
+    guild_id = interaction.guild.id
+    users = load_users().get(str(guild_id), {})
     discord_id = str(interaction.user.id)
 
     if discord_id in users and username in users[discord_id]:
@@ -274,17 +245,9 @@ async def register_twitch_user(interaction: discord.Interaction, username: str):
         return
 
     users.setdefault(discord_id, []).append(username)
-    save_users(users)
+    save_users(guild_id, users)
 
-    try:
-        response = requests.post(twitch_api_url, json={"username": username})
-        if response.status_code == 200:
-            await interaction.response.send_message(f"Registered Twitch username: {username}")
-        else:
-            await interaction.response.send_message(f"Failed to register {username} with Twitch API.")
-    except Exception as e:
-        logging.error(f"Twitch API error: {e}")
-        await interaction.response.send_message("Error setting up notifications.")
+    await interaction.response.send_message(f"Registered Twitch username: {username}")
 
 @bot.tree.command(name="unregister", description="Unregister a Twitch username.")
 async def unregister_twitch_user(interaction: discord.Interaction, username: str):
