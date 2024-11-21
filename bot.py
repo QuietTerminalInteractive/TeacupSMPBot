@@ -127,6 +127,12 @@ def save_users(guild_id, users):
     settings["servers"][str(guild_id)]["users"] = users
     logging.debug(f"Saving settings: {settings}")
     save_settings(settings)
+def load_welcome_channels(guild_id):
+    """Loads the welcome channels for a specific guild."""
+    settings = load_settings()
+    guild_settings = settings["servers"].get(str(guild_id), {})
+    logging.debug(f"Guild settings: {guild_settings}")
+    return guild_settings.get("welcome_channel_ids", [])
 
 async def send_announcement(user_name, stream_title, guild_id):
     """Send a Twitch stream notification to the Discord channel."""
@@ -290,6 +296,9 @@ async def on_message(message):
         else:
             responce = calculate_sum(message.content)
             await message.reply(responce)
+    greeting_regex = re.compile(r"\b(?:hi{1,}|hello|hey|hiya|howdy|h[e]{2,}llo)\b", re.IGNORECASE)
+    if greeting_regex.search(message.content.lower()) and message.channel.id in load_welcome_channels(message.guild.id):
+        await message.reply("Hello!")
 
 
 
@@ -366,6 +375,37 @@ async def help_command(interaction: discord.Interaction):
         )
 
     await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="add_welcome_channel", description="Adds the current channel to the list of welcome channels.")
+async def add_welcome_channel(interaction: discord.Interaction):
+    guild_id = interaction.guild.id
+    settings = load_settings()
+    if str(guild_id) not in settings["servers"]:
+        settings["servers"][str(guild_id)] = {}
+    if "welcome_channel_ids" not in settings["servers"][str(guild_id)]:
+        settings["servers"][str(guild_id)]["welcome_channel_ids"] = []
+    if interaction.channel.id not in settings["servers"][str(guild_id)]["welcome_channel_ids"]:
+        settings["servers"][str(guild_id)]["welcome_channel_ids"].append(interaction.channel.id)
+        save_settings(settings)
+        await interaction.response.send_message(f"Welcome channel added: {interaction.channel.name}")
+    else:
+        await interaction.response.send_message(f"{interaction.channel.name} is already a welcome channel.")
+
+
+@bot.tree.command(name="remove_welcome_channel", description="Removes the current channel from the list of welcome channels.")
+async def remove_welcome_channel(interaction: discord.Interaction):
+    guild_id = interaction.guild.id
+    settings = load_settings()
+    if str(guild_id) in settings["servers"] and "welcome_channel_ids" in settings["servers"][str(guild_id)]:
+        if interaction.channel.id in settings["servers"][str(guild_id)]["welcome_channel_ids"]:
+            settings["servers"][str(guild_id)]["welcome_channel_ids"].remove(interaction.channel.id)
+            save_settings(settings)
+            await interaction.response.send_message(f"Welcome channel removed: {interaction.channel.name}")
+        else:
+            await interaction.response.send_message(f"{interaction.channel.name} is not a welcome channel.")
+    else:
+        await interaction.response.send_message("No welcome channels set.")
+
 
 # Run Flask in a separate thread
 flask_thread = Thread(target=run_flask, daemon=True)
