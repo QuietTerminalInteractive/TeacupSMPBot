@@ -13,6 +13,7 @@ from flask import Flask, request, jsonify
 import asyncio
 import re
 import random
+import signal
 
 
 # Configuration
@@ -51,6 +52,31 @@ intents.guilds = True
 bot = commands.Bot(command_prefix='.', intents=intents)
 
 # Utility Functions
+
+def signal_handler(sig, frame):
+    logging.info("KeyboardInterrupt received. Exiting...")
+    os._exit(0)
+
+def calculate_sum(expression: str) -> str:
+    """
+    Calculates the sum of a mathematical expression.
+
+    Args:
+        expression (str): The expression to be calculated.
+
+    Returns:
+        The result of the expression as a string, or 'Invalid expression' if the expression is invalid.
+    """
+    if not re.match(r'^[\d+\-*/().\sx]*$', expression):
+        return 'Invalid expression'
+
+    try:
+        expression = expression.replace('^', '**').replace('x', '*').replace(' ', '')
+        result = eval(expression)
+        return f"`{expression}={result}`"
+    except Exception:
+        return 'Invalid expression'
+
 def load_settings():
     """Loads the settings from the settings.json file."""
     if os.path.exists(settings_file):
@@ -200,12 +226,14 @@ async def on_ready():
                     message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
                     await channel.send(message)
                     logging.info(f"Sent debug message to guild {guild.name} ({guild.id}) in channel {channel.name}")
+                    
                 else:
                     logging.warning(f"Channel with ID {ping_channel_id} not found in guild {guild.name} ({guild.id}).")
             else:
                 logging.warning(f"No ping channel set for guild {guild.name} ({guild.id}).")
         except Exception as e:
             logging.error(f"Error sending debug message to guild {guild.name} ({guild.id}): {e}")
+        continue
 
     bot.loop.create_task(process_announcements())
     logging.info("Bot is ready and announcements are being processed.")
@@ -215,25 +243,34 @@ def marry_the_bot_RE(messageText):
     return regex.search(messageText)
 
 
+
+
 @bot.event
 async def on_message(message):
     num = random.randint(1, 10000)
     if message.author == bot.user:
         return
+    if message.guild == 1227640355625766963:
+        if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
+            await message.add_reaction('🔵')
 
-    if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
-        await message.add_reaction('🔵')
+        if message.content.lower() == "marry steven":
 
-    if message.content.lower() == "marry steven":
+            if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
+                await message.reply("Yes.")
+            else:
+                await message.reply("No.")
+        if message.content.lower() == "tea":
+            await message.reply("Coffee is better.")
+        if num == 52:
+            await message.reply("🔵")
 
-        if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
-            await message.reply("Yes.")
-        else:
-            await message.reply("No.")
-    if message.content.lower() == "tea":
-        await message.reply("Coffee is better.")
-    if num == 52:
-        message.reply("🔵")
+    if message.content.lower().startswith("c!"):
+        message.content = message.content[2:]
+        responce = calculate_sum(message.content)
+        await message.reply(responce)
+
+
 
     await bot.process_commands(message)
 
@@ -313,7 +350,10 @@ async def help_command(interaction: discord.Interaction):
 flask_thread = Thread(target=run_flask, daemon=True)
 flask_thread.start()
 
+
+
+
 # Run Bot
 if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal_handler)
     bot.run(token)
-
