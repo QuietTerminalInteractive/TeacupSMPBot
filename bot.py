@@ -55,25 +55,84 @@ intents.guilds = True
 bot = commands.Bot(command_prefix='.', intents=intents)
 
 # Utility Functions
-def load_users():
+
+def load_settings():
+    """
+    Loads the settings from the users.json file.
+
+    If the file doesn't exist, returns a default structure with an empty 'servers' dictionary.
+
+    Returns:
+        dict: A dictionary containing the settings, including the 'servers' key.
+    """
     if os.path.exists(users_file):
         with open(users_file, 'r') as f:
             return json.load(f)
-    return {}
+    return {"servers": {}}
 
-def save_users(users):
+def save_settings(settings):
+    """
+    Saves the given settings to the users.json file.
+
+    Args:
+        settings (dict): The settings to save, typically containing the 'servers' key.
+    """
     with open(users_file, 'w') as f:
-        json.dump(users, f, indent=4)
+        json.dump(settings, f, indent=4)
 
-def save_ping_channel(channel_id):
-    with open(ping_channel_file, 'w') as f:
-        json.dump({"ping_channel_id": channel_id}, f)
+def load_users(guild_id):
+    """
+    Loads the registered users for a specific Discord server (guild).
 
-def load_ping_channel():
-    if os.path.exists(ping_channel_file):
-        with open(ping_channel_file, 'r') as f:
-            data = json.load(f)
-            return data.get("ping_channel_id", None)
+    Args:
+        guild_id (str): The Discord guild ID to load the users for.
+
+    Returns:
+        dict: A dictionary of users for the specified server, including a list of registered users.
+    """
+    settings = load_settings()
+    return settings["servers"].get(str(guild_id), {}).get("users", {})
+
+def save_users(guild_id, users):
+    """
+    Saves the user data for a specific Discord server (guild).
+
+    Args:
+        guild_id (str): The Discord guild ID where the users should be saved.
+        users (dict): A dictionary of user data to save under the specified guild ID.
+    """
+    settings = load_settings()
+    if str(guild_id) not in settings["servers"]:
+        settings["servers"][str(guild_id)] = {"users": {}}
+    settings["servers"][str(guild_id)]["users"] = users
+    save_settings(settings)
+
+def load_ping_channel(guild_id):
+    """
+    Loads the ping channel ID for a specific Discord server (guild).
+
+    Args:
+        guild_id (str): The Discord guild ID to load the ping channel for.
+
+    Returns:
+        int or None: The ID of the ping channel for the guild, or None if not set.
+    """
+    settings = load_settings()
+    return settings["servers"].get(str(guild_id), {}).get("ping_channel_id", None)
+
+def save_ping_channel(guild_id, channel_id):
+    """
+    Saves the ping channel ID for a specific Discord server (guild).
+
+    Args:
+        guild_id (str): The Discord guild ID where the ping channel should be saved.
+        channel_id (int): The ID of the channel to be used for ping notifications.
+    """
+    settings = load_settings()
+    if str(guild_id) not in settings["servers"]:
+        settings["servers"][str(guild_id)] = {}
+    settings["servers"][str(guild_id)]["ping_channel_id"] = channel_id
+    save_settings(settings)
 
 async def send_announcement(user_name, stream_title):
     """Send a Twitch stream notification to the Discord channel."""
@@ -182,17 +241,19 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    if "circle" in message.content.lower() or "c i r c l e" in message.content.lower() or num == 1:
+    if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
         await message.add_reaction('🔵')
 
-    elif message.content.lower() == "marry steven":
+    if message.content.lower() == "marry steven":
 
         if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
             await message.reply("Yes.")
         else:
             await message.reply("No.")
-    elif message.content.lower() == "tea":
+    if message.content.lower() == "tea":
         await message.reply("Coffee is better.")
+    if num == 52:
+        message.reply("🔵")
 
     await bot.process_commands(message)
 
