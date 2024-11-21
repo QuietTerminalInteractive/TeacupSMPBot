@@ -67,7 +67,8 @@ def calculate_sum(expression: str) -> str:
     Returns:
         The result of the expression as a string, or 'Invalid expression' if the expression is invalid.
     """
-    if not re.match(r'^[\d+\-*/().\sx]*$', expression):
+    if not re.match(r'^[\d+\-*/().\sx^]*$', expression):
+        logging.error(f"Invalid expression: {expression}")
         return 'Invalid expression'
 
     try:
@@ -75,7 +76,8 @@ def calculate_sum(expression: str) -> str:
         result = eval(expression)
         return f"`{expression}={result}`"
     except Exception:
-        return 'Invalid expression'
+        logging.error(f"Error evaluating expression")
+        return 'Evaluation error'
 
 def load_settings():
     """Loads the settings from the settings.json file."""
