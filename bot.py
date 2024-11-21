@@ -75,6 +75,8 @@ def calculate_sum(expression: str) -> str:
         expression = expression.replace('^', '**').replace('x', '*').replace(' ', '')
         result = eval(expression)
         return f"`{expression}={result}`"
+    except ZeroDivisionError:
+        return 'inf'
     except Exception:
         return 'Invalid expression'
 
