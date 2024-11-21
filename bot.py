@@ -76,7 +76,7 @@ def calculate_sum(expression: str) -> str:
         result = eval(expression)
         return f"`{expression}={result}`"
     except ZeroDivisionError:
-        return 'inf'
+        return '`inf`'
     except Exception:
         return 'Invalid expression'
 
