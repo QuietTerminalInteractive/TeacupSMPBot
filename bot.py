@@ -242,33 +242,43 @@ def marry_the_bot_RE(messageText):
     regex = re.compile(r"(?<!not\s)marry\ssteven", re.IGNORECASE)
     return regex.search(messageText)
 
+def random_trigger(chance):
+    if random.randint(1, chance) == 1:
+        return True
+    else:
+        return False
 
 
 
 @bot.event
 async def on_message(message):
-    num = random.randint(1, 10000)
+    
     if message.author == bot.user:
         return
-    if message.guild == 1227640355625766963:
+    if message.guild.id == 1227640355625766963:
         if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
             await message.add_reaction('🔵')
 
-        if message.content.lower() == "marry steven":
 
+        if message.content.lower() == "marry steven":
+            
             if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
                 await message.reply("Yes.")
             else:
                 await message.reply("No.")
         if message.content.lower() == "tea":
             await message.reply("Coffee is better.")
-        if num == 52:
+        if random_trigger(10000):
             await message.reply("🔵")
 
     if message.content.lower().startswith("c!"):
         message.content = message.content[2:]
-        responce = calculate_sum(message.content)
-        await message.reply(responce)
+        regex = re.compile(r"\b2\s*\+\s*2\b", re.IGNORECASE)
+        if regex.search(message.content) and random_trigger(4):
+            await message.reply("`2+2=5`")
+        else:
+            responce = calculate_sum(message.content)
+            await message.reply(responce)
 
 
 
