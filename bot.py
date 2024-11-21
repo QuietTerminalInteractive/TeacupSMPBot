@@ -16,7 +16,7 @@ import random
 
 
 # Configuration
-log_level = logging.INFO
+log_level = logging.DEBUG
 log_dir = './logs'
 token_file = './token.txt'
 settings_file = './settings.json'
@@ -69,6 +69,7 @@ def load_ping_channel(guild_id):
     """
     settings = load_settings()
     guild_settings = settings["servers"].get(str(guild_id), {})
+    logging.debug(f"Guild settings: {guild_settings}")
     return guild_settings.get("ping_channel_id", None)
 
 def save_ping_channel(guild_id, channel_id):
@@ -77,6 +78,7 @@ def save_ping_channel(guild_id, channel_id):
     if str(guild_id) not in settings["servers"]:
         settings["servers"][str(guild_id)] = {}
     settings["servers"][str(guild_id)]["ping_channel_id"] = channel_id
+    logging.debug(f"Saving settings: {settings}")
     save_settings(settings)
 
 def load_users():
@@ -85,6 +87,7 @@ def load_users():
     users = {}
     for guild_id, guild_data in settings["servers"].items():
         users[guild_id] = guild_data.get("users", {})
+    logging.debug(f"Users: {users}")
     return users
 
 def save_users(guild_id, users):
@@ -93,6 +96,7 @@ def save_users(guild_id, users):
     if str(guild_id) not in settings["servers"]:
         settings["servers"][str(guild_id)] = {"users": {}}
     settings["servers"][str(guild_id)]["users"] = users
+    logging.debug(f"Saving settings: {settings}")
     save_settings(settings)
 
 async def send_announcement(user_name, stream_title, guild_id):
@@ -133,7 +137,15 @@ def twitch_webhook():
             stream_title = data['event'].get('title', 'No title provided')
 
             users = load_users()
-            registered_guilds = [guild_id for guild_id, guild_users in users.items() if user_name in guild_users.values()]
+            logging.debug(f"Loaded users: {users}")
+
+            # Adjusted logic to handle nested structure
+            registered_guilds = [
+                guild_id
+                for guild_id, guild_users in users.items()
+                if any(user_name in usernames for usernames in guild_users.values())
+            ]
+            logging.debug(f"Registered guilds for {user_name}: {registered_guilds}")
 
             for guild_id in registered_guilds:
                 announcement_queue.put((user_name, stream_title, guild_id))
@@ -145,6 +157,7 @@ def twitch_webhook():
         logging.error(f"Webhook error: {e}")
         return jsonify({'error': f"An error occurred: {e}"}), 500
 
+
 @app.route('/notify_discord', methods=['POST'])
 def notify_discord():
     """Endpoint to register a Twitch username."""
@@ -153,11 +166,6 @@ def notify_discord():
         username = data.get("username")
         if not username:
             return jsonify({"error": "'username' is required"}), 400
-
-        users = load_users()
-        users.setdefault("registered", []).append(username)
-        with open(users_file, 'w') as f:
-            json.dump(users, f, indent=4)
 
         return jsonify({"status": "success", "message": f"User {username} registered"}), 200
     except Exception as e:
@@ -251,7 +259,8 @@ async def register_twitch_user(interaction: discord.Interaction, username: str):
 
 @bot.tree.command(name="unregister", description="Unregister a Twitch username.")
 async def unregister_twitch_user(interaction: discord.Interaction, username: str):
-    users = load_users()
+    guild_id = interaction.guild.id
+    users = load_users().get(str(guild_id), {})
     discord_id = str(interaction.user.id)
 
     if discord_id not in users or username not in users[discord_id]:
@@ -261,7 +270,7 @@ async def unregister_twitch_user(interaction: discord.Interaction, username: str
     users[discord_id].remove(username)
     if not users[discord_id]:
         del users[discord_id]
-    save_users(users)
+    save_users(guild_id, users)
 
     await interaction.response.send_message(f"Unregistered Twitch username: {username}")
 
@@ -307,3 +316,4 @@ flask_thread.start()
 # Run Bot
 if __name__ == '__main__':
     bot.run(token)
+
