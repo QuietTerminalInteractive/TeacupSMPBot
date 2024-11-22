@@ -153,6 +153,13 @@ async def send_announcement(user_name, stream_title, guild_id):
     except Exception as e:
         logging.error(f"Failed to send notification to guild {guild_id}: {e}")
 
+def remove_punctuation(inputText):
+    """
+    Removes punctuation from the input text.
+    """
+    regex = re.compile(r'[^a-zA-Z0-9\s]')
+    return regex.sub('', inputText)
+
 # Global variables
 start_time = time.time()
 
@@ -238,7 +245,7 @@ async def on_ready():
                         logging.debug(f"Sent debug message to guild {guild.name} ({guild.id}) in channel {channel.name}")
                     else:
                         logging.info(f"guild {guild.name} has ping channel set to {channel.name}")
-                    
+
                 else:
                     logging.warning(f"Channel with ID {ping_channel_id} not found in guild {guild.name} ({guild.id}).")
             else:
@@ -259,6 +266,15 @@ def marry_the_bot_RE(messageText):
         logging.debug("Failed check 2")
         return False
 
+def friend_the_bot_RE(messageText):
+    regex = re.compile(r"(?<!not\s)stevens\sfriend", re.IGNORECASE)
+    if regex.search(messageText):
+        logging.debug("Passed check 2")
+        return True
+    else:
+        logging.debug("Failed check 2")
+        return False
+
 def random_trigger(chance):
     if random.randint(1, chance) == 1:
         return True
@@ -269,29 +285,32 @@ def random_trigger(chance):
 
 @bot.event
 async def on_message(message):
-    
+    userMessage = remove_punctuation(message.content.lower().strip())
     if message.author == bot.user:
         return
     if message.guild.id in easter_egg_guilds:
-        if "circle" in message.content.lower() or "c i r c l e" in message.content.lower():
+        if "circle" in userMessage:
             await message.add_reaction('🔵')
 
 
-        if "marry steven" in message.content.lower().strip():
+        if "marry steven" in userMessage:
             logging.debug(f"Passed check 1")
             if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
                 await message.reply("Yes.")
             else:
                 await message.reply("No.")
-        if "tea" in message.content.lower():
-            await message.reply("Coffee is better.")
         if random_trigger(10000):
             await message.reply("🔵")
+
+        if "stevens friend" in userMessage:
+            logging.debug(f"Passed check 1")
+            if friend_the_bot_RE(userMessage):
+                await message.reply("Yes.")
 
     if message.content.lower().startswith("c!"):
         message.content = message.content[2:]
         regex = re.compile(r"\b2\s*\+\s*2\b", re.IGNORECASE)
-        if regex.search(message.content) and random_trigger(4):
+        if regex.search(message.content) and random_trigger(500):
             await message.reply("`2+2=5`")
         else:
             responce = calculate_sum(message.content)
