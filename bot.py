@@ -283,7 +283,7 @@ async def on_message(message):
                 await message.reply("Yes.")
             else:
                 await message.reply("No.")
-        if message.content.lower() == "tea":
+        if "tea" in message.content.lower():
             await message.reply("Coffee is better.")
         if random_trigger(10000):
             await message.reply("🔵")
