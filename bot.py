@@ -286,6 +286,8 @@ def random_trigger(chance):
 @bot.event
 async def on_message(message):
     userMessage = remove_punctuation(message.content.lower().strip())
+
+    
     if message.author == bot.user:
         return
     if message.guild.id in easter_egg_guilds:
@@ -306,6 +308,13 @@ async def on_message(message):
             logging.debug(f"Passed check 1")
             if friend_the_bot_RE(userMessage):
                 await message.reply("Yes.")
+    
+    if message.content.startswith("e!"):
+        logging.info(f"Received command: {userMessage}")
+        responce = message.content[2:]
+        if responce.startswith(" "):
+            responce = responce[1:]
+        await message.channel.send(responce)
 
     if message.content.lower().startswith("c!"):
         message.content = message.content[2:]
