@@ -5,14 +5,16 @@
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use, modify, and distribute modifications of the Software for **non-commercial purposes** and **private use**, subject to the following conditions:
 
 ## 0. Definitions
-- From here on forwards, the "Developers" refers to **both QuietTerminalInteractive** and **Minecrafter8001**.
-- "Non-commercial purposes" refers to activities where the Software is not used to generate direct or indirect financial gain. Examples include personal projects, educational use, or nonprofit research.
-- "Private use" refers to use by an individual or within a closed, non-commercial group, such as a private organization or educational institution.
+- The "Original Developers" refers to the individuals or entities who authored significant portions of the Software.
+- The "Developers" refers to the Original Developers and any other individuals or entities who modify and redistribute the Software, provided they comply with this license.
 
 ## 1. Attribution
-- Clear and appropriate credit must be given to the Developers, including:
-  - Naming the Developers in a prominent location (e.g., documentation, splash screen, or credits section).
+- Clear and appropriate credit must always be given to the relevant Original Developers, including:
+  - Naming the Original Developers responsible for the code or contributions used in the Software.
   - A link to the original source or repository if publicly available.
+- If modified versions of the Software are distributed, Subsequent Developers must:
+  - Retain the relevant Original Developers' attribution for all portions of the Software they contributed to.
+  - Add their own name(s) as additional Developers if desired, but not remove or replace the Original Developers.
 
 ## 2. Non-Commercial Use Only
 - The Software and any derivative works may not be used for any **commercial purpose**. This includes, but is not limited to:
