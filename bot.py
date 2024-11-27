@@ -20,10 +20,13 @@ import signal
 log_level = logging.DEBUG
 log_dir = './logs'
 token_file = './token.txt'
+twitch_file = './twitch.txt'
 settings_file = './settings.json'
 twitch_api_url = "http://127.0.0.1:5002/notify_discord"
+callback_url = "https://twitchwebhook.quietterminal.co.uk/twitch-webhook"
 people_who_can_marry_the_bot = [606918160146235405, 479325312023396373, 779052381312516126, 1219369222933708862]
 easter_egg_guilds = [1227640355625766963,1091009808431325184]
+credentials = {}
 
 # Initialize Logging
 if not os.path.exists(log_dir):
@@ -46,6 +49,19 @@ except FileNotFoundError:
     logging.error(f"Token file '{token_file}' not found!")
     raise
 
+try:
+    with open(twitch_file) as f:
+        for line in f:
+            key, value = line.strip().split('=')
+            credentials[key] = value
+except FileNotFoundError:
+    logging.error(f"Token file '{twitch_file}' not found!")
+    raise
+
+CLIENT_ID = credentials.get('CLIENT_ID')
+CLIENT_SECRET = credentials.get('CLIENT_SECRET')
+ACCESS_TOKEN = credentials.get('ACCESS_TOKEN')
+
 # Bot Setup
 intents = discord.Intents.default()
 intents.message_content = True
@@ -58,34 +74,21 @@ def signal_handler(sig, frame):
     logging.info("KeyboardInterrupt received. Exiting...")
     os._exit(0)
 
-def calculate_sum(expression: str) -> str:
-    """
-    Calculates the sum of a mathematical expression.
-
-    Args:
-        expression (str): The expression to be calculated.
-
-    Returns:
-        The result of the expression as a string, or 'Invalid expression' if the expression is invalid.
-    """
-    if not re.match(r'^[\d+\-*/().\sx]*$', expression):
-        return 'Invalid expression'
-
-    try:
-        expression = expression.replace('^', '**').replace('x', '*').replace(' ', '')
-        result = eval(expression)
-        return f"`{expression}={result}`"
-    except ZeroDivisionError:
-        return '`inf`'
-    except Exception:
-        return 'Invalid expression'
-
 def load_settings():
     """Loads the settings from the settings.json file."""
     if os.path.exists(settings_file):
         with open(settings_file, 'r') as f:
-            return json.load(f)
-    return {"servers": {}}
+            try:
+                settings = json.load(f)
+            except json.JSONDecodeError:
+                logging.warning("Settings file is invalid JSON. Reinitializing settings.")
+                settings = {}
+    else:
+        settings = {}
+    if "servers" not in settings:
+        settings["servers"] = {}
+
+    return settings
 
 def save_settings(settings):
     """Saves the settings to the settings.json file."""
@@ -127,6 +130,7 @@ def save_users(guild_id, users):
     settings["servers"][str(guild_id)]["users"] = users
     logging.debug(f"Saving settings: {settings}")
     save_settings(settings)
+
 def load_welcome_channels(guild_id):
     """Loads the welcome channels for a specific guild."""
     settings = load_settings()
@@ -160,6 +164,56 @@ def remove_punctuation(inputText):
     regex = re.compile(r'[^a-zA-Z0-9\s]')
     return regex.sub('', inputText)
 
+def get_broadcaster_user_id(username):
+    """Get the Twitch user ID for a given username."""
+    headers = {
+        "Client-ID": CLIENT_ID,
+        "Authorization": f"Bearer {ACCESS_TOKEN}"
+    }
+    url = f"https://api.twitch.tv/helix/users?login={username}"
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        user_data = response.json()
+        if user_data["data"]:
+            return user_data["data"][0]["id"]
+        else:
+            logging.error(f"User '{username}' not found.")
+            return None
+    else:
+        logging.error(f"Failed to fetch user ID for '{username}': {response.status_code} - {response.text}")
+        return None
+
+def subscribe_to_twitch_webhook(username, callback_url):
+    """Subscribe to Twitch webhook events."""
+    broadcaster_user_id = get_broadcaster_user_id(username)
+    if broadcaster_user_id is None:
+        return  # Stop if we couldn't get the user ID
+
+    headers = {
+     "Client-ID": CLIENT_ID,
+     "Authorization": f"Bearer {ACCESS_TOKEN}",
+     "Content-Type": "application/json"
+    }
+
+    body = {
+     "type": "stream.online",  # The event you're subscribing to
+     "version": "1",
+     "condition": {
+     "broadcaster_user_id": broadcaster_user_id  # Use the user ID here
+     },
+     "transport": {
+      "method": "webhook",
+      "callback": callback_url,
+      "secret": CLIENT_SECRET  # Optional, for validating the webhook
+     }
+    }
+
+    response = requests.post("https://api.twitch.tv/helix/eventsub/subscriptions", json=body, headers=headers)
+    if response.status_code == 202:
+        logging.info(f"Successfully subscribed to {username}'s stream events.")
+    else:
+        logging.error(f"Failed to subscribe: {response.status_code} - {response.text}")
+
 # Global variables
 start_time = time.time()
 
@@ -172,33 +226,38 @@ app = Flask(__name__)
 @app.route('/twitch-webhook', methods=['POST'])
 def twitch_webhook():
     """Handle Twitch webhook callbacks."""
-    try:
-        data = request.json
-        if 'event' in data:
-            user_name = data['event']['broadcaster_user_name']
-            stream_title = data['event'].get('title', 'No title provided')
+    if request.method == 'POST':
+        try:
+            data = request.json
+            if 'event' in data:
+                user_name = data['event']['broadcaster_user_name']
+                stream_title = data['event'].get('title', 'No title provided')
 
-            users = load_users()
-            logging.debug(f"Loaded users: {users}")
+                users = load_users()
+                logging.debug(f"Loaded users: {users}")
 
-            # Adjusted logic to handle nested structure
-            registered_guilds = [
-                guild_id
-                for guild_id, guild_users in users.items()
-                if any(user_name in usernames for usernames in guild_users.values())
-            ]
-            logging.debug(f"Registered guilds for {user_name}: {registered_guilds}")
+                # Adjusted logic to handle nested structure
+                registered_guilds = [
+                    guild_id
+                    for guild_id, guild_users in users.items()
+                    if any(user_name in usernames for usernames in guild_users.values())
+                ]
+                logging.debug(f"Registered guilds for {user_name}: {registered_guilds}")
 
-            for guild_id in registered_guilds:
-                announcement_queue.put((user_name, stream_title, guild_id))
+                for guild_id in registered_guilds:
+                    announcement_queue.put((user_name, stream_title, guild_id))
 
-            logging.info(f"Webhook processed for {user_name}, queued for {len(registered_guilds)} guild(s).")
-            return jsonify({'status': 'processed', 'guilds_notified': len(registered_guilds)})
-        return jsonify({'status': 'ignored'})
-    except Exception as e:
-        logging.error(f"Webhook error: {e}")
-        return jsonify({'error': f"An error occurred: {e}"}), 500
+                logging.info(f"Webhook processed for {user_name}, queued for {len(registered_guilds)} guild(s).")
+                return jsonify({'status': 'processed', 'guilds_notified': len(registered_guilds)})
+            return jsonify({'status': 'ignored'})
+        except Exception as e:
+            logging.error(f"Webhook error: {e}")
+            return jsonify({'error': f"An error occurred: {e}"}), 500
 
+    if request.method == 'GET':
+        hub_challenge = request.args.get('hub.challenge')
+        if hub_challenge:
+            return hub_challenge, 200
 
 @app.route('/notify_discord', methods=['POST'])
 def notify_discord():
@@ -233,27 +292,6 @@ async def on_ready():
     except Exception as e:
         logging.error(f"Error syncing commands: {e}")
 
-    for guild in bot.guilds:
-        try:
-            ping_channel_id = load_ping_channel(guild.id)
-            if ping_channel_id:
-                channel = bot.get_channel(ping_channel_id)
-                if channel:
-                    if log_level == logging.DEBUG:
-                        message = f"`DEBUG: Start scheduled at {time.strftime('%d/%m/%Y-%H:%M:%S')}`"
-                        await channel.send(message)
-                        logging.debug(f"Sent debug message to guild {guild.name} ({guild.id}) in channel {channel.name}")
-                    else:
-                        logging.info(f"guild {guild.name} has ping channel set to {channel.name}")
-
-                else:
-                    logging.warning(f"Channel with ID {ping_channel_id} not found in guild {guild.name} ({guild.id}).")
-            else:
-                logging.warning(f"No ping channel set for guild {guild.name} ({guild.id}).")
-        except Exception as e:
-            logging.error(f"Error sending debug message to guild {guild.name} ({guild.id}): {e}")
-        continue
-
     bot.loop.create_task(process_announcements())
     logging.info("Bot is ready and announcements are being processed.")
 
@@ -286,8 +324,6 @@ def random_trigger(chance):
 @bot.event
 async def on_message(message):
     userMessage = remove_punctuation(message.content.lower().strip())
-
-    
     if message.author == bot.user:
         return
     if message.guild.id in easter_egg_guilds:
@@ -308,27 +344,6 @@ async def on_message(message):
             logging.debug(f"Passed check 1")
             if friend_the_bot_RE(userMessage):
                 await message.reply("Yes.")
-    
-    if message.content.startswith("e!"):
-        logging.info(f"Received command: {userMessage}")
-        responce = message.content[2:]
-        if responce.startswith(" "):
-            responce = responce[1:]
-        await message.channel.send(responce)
-
-    if message.content.lower().startswith("c!"):
-        message.content = message.content[2:]
-        regex = re.compile(r"\b2\s*\+\s*2\b", re.IGNORECASE)
-        if regex.search(message.content) and random_trigger(500):
-            await message.reply("`2+2=5`")
-        else:
-            responce = calculate_sum(message.content)
-            await message.reply(responce)
-    greeting_regex = re.compile(r"\b(?:hi{1,}|hello|hey|hiya|howdy|h[e]{2,}llo)\b", re.IGNORECASE)
-    if greeting_regex.search(message.content.lower()) and message.channel.id in load_welcome_channels(message.guild.id):
-        await message.reply("Hello!")
-
-
 
     await bot.process_commands(message)
 
@@ -349,6 +364,7 @@ async def register_twitch_user(interaction: discord.Interaction, username: str):
 
     users.setdefault(discord_id, []).append(username)
     save_users(guild_id, users)
+    subscribe_to_twitch_webhook(username, callback_url)
 
     await interaction.response.send_message(f"Registered Twitch username: {username}")
 
@@ -403,37 +419,6 @@ async def help_command(interaction: discord.Interaction):
         )
 
     await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="add_welcome_channel", description="Adds the current channel to the list of welcome channels.")
-async def add_welcome_channel(interaction: discord.Interaction):
-    guild_id = interaction.guild.id
-    settings = load_settings()
-    if str(guild_id) not in settings["servers"]:
-        settings["servers"][str(guild_id)] = {}
-    if "welcome_channel_ids" not in settings["servers"][str(guild_id)]:
-        settings["servers"][str(guild_id)]["welcome_channel_ids"] = []
-    if interaction.channel.id not in settings["servers"][str(guild_id)]["welcome_channel_ids"]:
-        settings["servers"][str(guild_id)]["welcome_channel_ids"].append(interaction.channel.id)
-        save_settings(settings)
-        await interaction.response.send_message(f"Welcome channel added: {interaction.channel.name}")
-    else:
-        await interaction.response.send_message(f"{interaction.channel.name} is already a welcome channel.")
-
-
-@bot.tree.command(name="remove_welcome_channel", description="Removes the current channel from the list of welcome channels.")
-async def remove_welcome_channel(interaction: discord.Interaction):
-    guild_id = interaction.guild.id
-    settings = load_settings()
-    if str(guild_id) in settings["servers"] and "welcome_channel_ids" in settings["servers"][str(guild_id)]:
-        if interaction.channel.id in settings["servers"][str(guild_id)]["welcome_channel_ids"]:
-            settings["servers"][str(guild_id)]["welcome_channel_ids"].remove(interaction.channel.id)
-            save_settings(settings)
-            await interaction.response.send_message(f"Welcome channel removed: {interaction.channel.name}")
-        else:
-            await interaction.response.send_message(f"{interaction.channel.name} is not a welcome channel.")
-    else:
-        await interaction.response.send_message("No welcome channels set.")
-
 
 # Run Flask in a separate thread
 flask_thread = Thread(target=run_flask, daemon=True)
