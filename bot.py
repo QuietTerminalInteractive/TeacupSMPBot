@@ -24,7 +24,7 @@ twitch_file = './twitch.txt'
 settings_file = './settings.json'
 twitch_api_url = "http://127.0.0.1:5002/notify_discord"
 callback_url = "https://twitchwebhook.quietterminal.co.uk/twitch-webhook"
-people_who_can_marry_the_bot = [606918160146235405, 479325312023396373, 779052381312516126, 1219369222933708862]
+people_who_can_marry_the_bot = [479325312023396373, 779052381312516126, 1219369222933708862, 759087586559131698]
 easter_egg_guilds = [1227640355625766963,1091009808431325184]
 credentials = {}
 
@@ -187,7 +187,7 @@ def subscribe_to_twitch_webhook(username, callback_url):
     """Subscribe to Twitch webhook events."""
     broadcaster_user_id = get_broadcaster_user_id(username)
     if broadcaster_user_id is None:
-        return  # Stop if we couldn't get the user ID
+        return
 
     headers = {
      "Client-ID": CLIENT_ID,
@@ -196,15 +196,15 @@ def subscribe_to_twitch_webhook(username, callback_url):
     }
 
     body = {
-     "type": "stream.online",  # The event you're subscribing to
+     "type": "stream.online",
      "version": "1",
      "condition": {
-     "broadcaster_user_id": broadcaster_user_id  # Use the user ID here
+     "broadcaster_user_id": broadcaster_user_id
      },
      "transport": {
       "method": "webhook",
       "callback": callback_url,
-      "secret": CLIENT_SECRET  # Optional, for validating the webhook
+      "secret": CLIENT_SECRET
      }
     }
 
@@ -214,10 +214,18 @@ def subscribe_to_twitch_webhook(username, callback_url):
     else:
         logging.error(f"Failed to subscribe: {response.status_code} - {response.text}")
 
+def subscribe_to_all_usernames():
+    """Subscribes to Twitch webhooks for all usernames in settings.json."""
+    settings = load_settings()
+    for server_id, server_data in settings.get("servers", {}).items():
+        for user_id, usernames in server_data.get("users", {}).items():
+            for username in usernames:
+                logging.info(f"Subscribing to Twitch webhook for username: {username}")
+                subscribe_to_twitch_webhook(username, callback_url)
+
 # Global variables
 start_time = time.time()
 
-# Initialize a Queue for announcements
 announcement_queue = Queue()
 
 # Flask App Setup
@@ -236,7 +244,6 @@ def twitch_webhook():
                 users = load_users()
                 logging.debug(f"Loaded users: {users}")
 
-                # Adjusted logic to handle nested structure
                 registered_guilds = [
                     guild_id
                     for guild_id, guild_users in users.items()
@@ -276,7 +283,6 @@ def run_flask():
     """Run Flask server."""
     app.run(host='0.0.0.0', port=5002)
 
-# Background task to process announcements
 async def process_announcements():
     while True:
         user_name, stream_title, guild_id = await bot.loop.run_in_executor(None, announcement_queue.get)
@@ -291,6 +297,8 @@ async def on_ready():
         logging.info("Slash commands synced.")
     except Exception as e:
         logging.error(f"Error syncing commands: {e}")
+
+    subscribe_to_all_usernames()
 
     bot.loop.create_task(process_announcements())
     logging.info("Bot is ready and announcements are being processed.")
@@ -333,7 +341,7 @@ async def on_message(message):
 
         if "marry steven" in userMessage:
             logging.debug(f"Passed check 1")
-            if message.author.id in people_who_can_marry_the_bot or not marry_the_bot_RE(message.content.lower()):
+            if message.author.id in people_who_can_marry_the_bot or (not marry_the_bot_RE(message.content.lower()) and not message.author.id in people_that_can_marry_the_bot):
                 await message.reply("Yes.")
             else:
                 await message.reply("No.")
@@ -420,14 +428,12 @@ async def help_command(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-# Run Flask in a separate thread
 flask_thread = Thread(target=run_flask, daemon=True)
 flask_thread.start()
 
 
 
 
-# Run Bot
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     bot.run(token)
